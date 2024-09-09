@@ -5,6 +5,6 @@
 - **Trial (NCT) ID**: [NCT01621490](https://clinicaltrials.gov/study/NCT01621490)
 - **Cancer Type:** Skin Cutaneous Melanoma  
 - **Data Source:** [BMS038 Analysis](https://github.com/riazn/bms038_analysis), [ENA](https://www.ebi.ac.uk/ena/browser/view/PRJNA356761), and private FASTQ files shared  
-- **File for Mapping:** `filereport_read_run_PRJNA356761_tsv.txt` from EGA  
+- **File for Mapping:** `filereport_read_run_PRJNA356761_tsv.txt` from ENA  
 - **Clinical File:** `1-s2.0-S0092867417311224-mmc2.xlsx` from paper supplementary materials  
 - **SNV File:** `1-s2.0-S0092867417311224-mmc2.xlsx` from paper supplementary materials
