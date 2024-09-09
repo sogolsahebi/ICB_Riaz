@@ -81,7 +81,7 @@ process_kallisto_output <- function(work_dir, tx2gene) {
 }
 
 # Define working directory and process kallisto output
-work_dir <- "files"
+work_dir <- "Gide_kallisto_v0.46.1_GRCh38.40/files"
 expr_list <- process_kallisto_output(work_dir, tx2gene)
 
 # Save expression list to an RDS file
