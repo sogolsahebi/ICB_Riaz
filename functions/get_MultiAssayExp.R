@@ -73,7 +73,7 @@ get_MultiAssayExp <- function(study, input_dir, expr_with_counts_isoforms=FALSE)
   
   #add
   #ICB_riaz <- get_MultiAssayExp("Riaz", "files/",TRUE) this 128.6 is want to samller it to less than  25MB.
-  saveRDS(ICB_riaz, file = "output/ICB_Riaz.rds")
+  #saveRDS(ICB_riaz, file = "output/ICB_Riaz.rds")
 
   return(MultiAssayExperiment(experiments=se_list, colData=coldata))
 }
