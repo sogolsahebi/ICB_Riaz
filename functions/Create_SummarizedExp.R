@@ -6,7 +6,7 @@ library(biomaRt)
 library(stringr)
 
 #add 
-load("files/Gencode.v40.annotation.RData"
+load("files/Gencode.v40.annotation.RData")
 
 clin_cols <- c(
   "patient" , "sex" , "age" , "primary" , "histo" , "tissueid", "treatmentid", "stage" , 
