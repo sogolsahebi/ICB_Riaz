@@ -68,6 +68,9 @@ clin <- annotate_tissue(clin = clin, study = 'Riaz', annotation_tissue = annotat
 clin$treatment <- ifelse(clin_original$Cohort == "NIV3-PROG", "Combo", "PD-1/PD-L1")
 clin <- add_column(clin, treatmentid = NA, .after = 'tissueid')
 
+# add column "treatment_timepoint"
+clin$treatment_timepoint <- ifelse(grepl("Pre", clin$sample_title), "Pre", ifelse(grepl("On", clin$sample_title), "Post", "Both"))
+
 # Replace empty strings with NA
 clin[clin == "-"] <- NA
 
