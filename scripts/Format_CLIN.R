@@ -64,8 +64,9 @@ annotation_tissue <- read.csv(path)
 # Annotate 'clin' using tissue annotation
 clin <- annotate_tissue(clin = clin, study = 'Riaz', annotation_tissue = annotation_tissue, check_histo = TRUE)
 
-# Add treatmentid based on Cohort
-clin <- add_column(clin, treatmentid = ifelse(clin_original$Cohort == "NIV3-PROG", "Combo", "PD-1/PD-L1"), .after = 'tissueid')
+# Add treatment based on Cohort
+clin$treatment <- ifelse(clin_original$Cohort == "NIV3-PROG", "Combo", "PD-1/PD-L1")
+clin <- add_column(clin, treatmentid = NA, .after = 'tissueid')
 
 # Replace empty strings with NA
 clin[clin == "-"] <- NA
