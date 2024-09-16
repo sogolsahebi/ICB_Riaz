@@ -65,8 +65,8 @@ annotation_tissue <- read.csv(path)
 clin <- annotate_tissue(clin = clin, study = 'Riaz', annotation_tissue = annotation_tissue, check_histo = TRUE)
 
 # Add treatment based on Cohort
-clin$treatment <- ifelse(clin_original$Cohort == "NIV3-PROG", "Combo", "PD-1/PD-L1")
-clin <- add_column(clin, treatmentid = NA, .after = 'tissueid')
+clin$treatment <- ifelse(clin_original$Cohort == "NIV3-PROG", "IO+combo", "PD-1/PD-L1")
+clin$treatmentid <- NA
 
 # add column "treatment_timepoint"
 clin$treatment_timepoint <- ifelse(grepl("Pre", clin$sample_title), "Pre", ifelse(grepl("On", clin$sample_title), "Post", "Both"))
