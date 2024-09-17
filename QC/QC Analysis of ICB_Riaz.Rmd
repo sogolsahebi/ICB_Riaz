@@ -200,10 +200,10 @@ clin_naive <- clin %>%
     palette = c("red", "blue")
   )
 ```
- 
- 
-## NIV3-PROG High mutation load 
-(> 100 mutations as previously reported) is not associated with OS in Ipi-P patients (log-rank test; p = NS).simsilar rto pape rreuslt i doenst have significat p value 
+  
+## NIV3-PROG High Mutation Load Analysis
+
+For the "NIV3-PROG" cohort, we assess the impact of a high mutation load (defined as >100 mutations) on overall survival. Previous analyses reported no significant association between high mutation load and OS in patients who progressed on ipilimumab (Ipi-P), which is confirmed by our log-rank test.
  
 ```{r  Figure S1 , fig.width= 6 , fig.height= 6 }
 
