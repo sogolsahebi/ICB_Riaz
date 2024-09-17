@@ -1,0 +1,241 @@
+---
+title: "QC_Analysis_of_ICB_Riaz.Rmd"
+author:
+- name: Nasim Bondar Sahebi
+  affiliation: UofT, Princess Margaret Cancer Center, University Health Network, Toronto, Ontario, Canada
+date: "2024-09-15"
+output:
+  html_document: default
+  pdf_document: default
+
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+
+
+```
+
+## load libraries
+
+```{r libraries cars}
+library(MultiAssayExperiment) 
+library(ggplot2)
+library(dplyr)
+library(ComplexHeatmap)
+library(DESeq2)
+library(gridExtra)
+library(DT)
+library(survival)
+library(survminer)
+```
+
+## Data Loading and Preparation
+
+**Data Overview**:
+
+  - **Study Reference**: [PubMed ID 29033130](https://pubmed.ncbi.nlm.nih.gov/29033130/)
+  - **Patient Count **: 83
+  - **Treatment counts**:
+  - **IO+combo**: 43
+  - **PD-1/PD-L1**: 40
+  
+
+Load multiassay .rds file, extract clinical, expression and annotations data; prepare gene expression data for analysis.
+
+```{r multiassay extraction}
+# Load your multiassay result and extract clinical data , expression data and annotation
+
+#load mae obj
+mae <- readRDS("~/BHK lab/ICB/ICB_Riaz/output/ICB_Riaz.rds")
+
+#extract Clinical data 
+clin <- data.frame(colData(mae)) # Dim 83x 44
+
+# assay names:  "expr_gene_tpm", "expr_gene_counts", "expr_isoform_tpm", "expr_isoform_counts" and "snv"
+names(mae)
+
+#extract the expression data and snv
+expr <- assays(mae)[["expr_gene_tpm"]] # Dim 61544 x 51
+snv <- assays(mae)[["snv"]]
+
+#extracting the annotation 
+annot_expr <- data.frame(rowData(mae@ExperimentList$expr_gene_tpm))
+annot_snv <- data.frame(rowData(mae@ExperimentList$snv))
+
+# Display first few rows of the data set.
+DT::datatable(expr[1:8, 1:4])
+
+
+```
+
+
+## Pre-therapy Tumor Gene Expression Analysis
+
+
+#### 1. **Paper Methodology**:
+   - **DEGs Identified**: 189 DEGs (q-value < 0.20) between responders (CR/PR) and non-responders (PD) based on pre-therapy tumor biopsies.
+   - **Normalization**: RNA-seq data was normalized using regularized-logarithm transformation (rlog) for variance stabilization before clustering.
+
+#### 2. **Our Analysis**:
+   - **Samples**: 51 samples analyzed, with 29 included after filtering for missing response data.
+   - **DEGs Identified**: 224 DEGs (p-value < 0.05) after filtering out genes with Ensembl IDs ("ENS").
+   - **Normalization**: Followed the same rlog normalization method for variance stabilization and clustering.
+
+
+```{r Fig3A , fig.width= 12 , fig.height= 50 }
+# Load necessary librarieses
+
+expr <- assays(mae)[["expr_gene_counts"]]
+annot <- data.frame(rowData(mae@ExperimentList$expr_gene_counts))
+clin <- data.frame(colData(mae))
+
+# Recode response categories for DEGs analysis
+clin$response_paper <- ifelse(clin$recist %in% c("PR", "CR"), "Responder", "Non_Responder")
+
+# Ensure matching gene IDs and filtering invalid genes
+expr <- expr[match(rownames(expr), annot$gene_id), ]
+valid_genes <- !is.na(annot$gene_name) & !duplicated(annot$gene_name)
+expr <- expr[valid_genes, ]
+rownames(expr) <- annot$gene_name[valid_genes]
+DT::datatable(expr[1:8, 1:4])
+
+
+# Filter clinical data to include only patients present in both datasets
+clin <- clin[!is.na(clin$recist), ]
+patients <- intersect(clin$patientid, colnames(expr))
+clin_expr <- clin[patients, ] # 51 x 43 samples
+expr <- expr[, patients]  # 61544 x 51
+
+# Create DESeq2 dataset
+dds <- DESeqDataSetFromMatrix(countData = round(expr), colData = clin_expr, design = ~response_paper)
+
+# Run DESeq2 analysis
+dds <- DESeq(dds)
+
+# Get results with p-value < 0.20
+res <- results(dds)
+
+# Filter for significant genes (p-value < 0.05)
+res_sig <- res[which(res$pvalue < 0.05),]
+
+# Number of DEGs
+length(rownames(data.frame(res_sig))) # DEGs 387
+
+# Display significant DEGs using DT
+res_sig_filtered <- res_sig[!grepl("^ENS", rownames(res_sig)), ] #224 DEGs now
+DT::datatable(data.frame(res_sig[1:13, 1:6]), caption = "All Significant DEGs (padj < 0.05)")
+
+# normlize expr as it follo w the paper
+expr <- assay(rlog(dds, blind = FALSE))
+
+# Filter expression matrix to include only DEGs
+
+expr_degs <- expr[rownames(expr) %in% rownames(data.frame(res_sig))& !grepl("^ENS", rownames(expr)), ]
+
+
+clin_expr$recist <- ifelse(clin_expr$recist %in% c("PR", "CR"), "PR/CR", clin_expr$recist)
+
+
+# Create annotations based on clinical data
+annotations <- data.frame(
+  Response = clin_expr$recist,
+  Cohort = clin_expr$Cohort
+)
+
+rownames(annotations) <- rownames(clin_expr)
+
+# Define colors for annotations
+response_colors <- c("PD" = "red", "SD" = "yellow", "PR/CR" = "green")
+cohort_colors <- c("NIV3-NAIVE" = "blue", "NIV3-PROG" = "purple")
+
+# Create heatmap annotations
+ha <- HeatmapAnnotation(df = annotations, col = list(Response = response_colors, Cohort = cohort_colors))
+
+# Set up heatmap colors
+heatmap_colors <- colorRampPalette(c("navy", "white", "firebrick"))(100)
+
+# Generate the heatmap
+
+Heatmap(expr_degs, 
+        name = "Log2(expression)", 
+        top_annotation = ha, 
+        col = heatmap_colors, 
+        cluster_rows = TRUE, 
+        cluster_columns = TRUE)
+
+```
+
+## Analysis of Ipi-Naive Patients by Mutation Load
+
+Overall survival (OS) in Ipi-Naive (Ipi-N) patients analyzed by mutation load, where a high mutation load is defined as greater than 100 mutations. The observed p-value of 0.064 is close to the threshold of significance, suggesting a trend towards statistical significance
+
+
+```{r Fig1B , fig.width= 6 , fig.height= 6 }
+
+#Figure 1B : "NIV3-NAIVE"
+
+# Create subset for Ipi Naive cohort with complete case analysis for necessary columns
+clin_naive <- clin %>%
+  filter(Cohort == "NIV3-NAIVE", !is.na(Mutation.Load))
+
+# Calculate median mutation load if the subset is not empty
+
+  clin_naive$mutation_load_group <- ifelse(clin_naive$Mutation.Load > 100, "High", "Low")
+
+  # Prepare the survival object
+  surv_object <- Surv(time = clin_naive$survival_time_os, event = clin_naive$event_occurred_os)
+
+  # Fit the survival model based on mutation load groups
+  fit <- survfit(surv_object ~ mutation_load_group, data = clin_naive)
+
+  # Plot the Kaplan-Meier survival curves
+  ggsurvplot(
+    fit, 
+    data = clin_naive,
+    risk.table = TRUE,
+    pval = TRUE,
+    title="Overall Survival Based on Mutation Load (Ipi Naive)",
+    palette = c("red", "blue")
+  )
+```
+ 
+ 
+## NIV3-PROG High mutation load 
+(> 100 mutations as previously reported) is not associated with OS in Ipi-P patients (log-rank test; p = NS).simsilar rto pape rreuslt i doenst have significat p value 
+ 
+```{r  Figure S1 , fig.width= 6 , fig.height= 6 }
+
+# Figure S1 : NIV3-PROG
+  
+library(dplyr)
+library(survival)
+library(survminer)
+
+# Create subset for Ipi Naive cohort with complete case analysis for necessary columns
+clin_prog <- clin %>%
+  filter(Cohort == "NIV3-PROG", !is.na(Mutation.Load))
+
+# Calculate median mutation load if the subset is not empty
+
+  clin_prog$mutation_load_group <- ifelse(clin_prog$Mutation.Load > 100, "High", "Low")
+
+  # Prepare the survival object
+  surv_object <- Surv(time = clin_prog$survival_time_os, event = clin_prog$event_occurred_os)
+
+  # Fit the survival model based on mutation load groups
+  fit <- survfit(surv_object ~ mutation_load_group, data = clin_prog)
+
+  # Plot the Kaplan-Meier survival curves
+  ggsurvplot(
+    fit, 
+    data = clin_prog,
+    risk.table = TRUE,
+    pval = TRUE,
+    title="Overall Survival Based on Mutation Load (NIV3-PROG)",
+    palette = c("red", "blue")
+  )
+
+```
+
