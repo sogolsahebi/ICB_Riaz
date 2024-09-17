@@ -23,7 +23,7 @@ library(rhdf5)
 
 # clin <- read_excel(file.path(work_dir, '1-s2.0-S0092867417311224-mmc2.xlsx'), sheet='Table S2')
 clin <- read_excel("files/1-s2.0-S0092867417311224-mmc2.xlsx") # Load clinical data (73 rows, 12 columns)
-mapping <- read.csv("files/filereport_read_run_PRJNA356761_tsv.txt", sep = "\t") # Load mapping data
+mapping <- read.csv("files/filereport_read_run_PRJNA356761_tsv-DESKTOP-LJP6LNF.txt", sep = "\t") # Load mapping data
 
 
 # Clean column names by replacing non-word characters with '.'
