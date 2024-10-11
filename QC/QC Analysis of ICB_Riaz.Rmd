@@ -35,7 +35,7 @@ library(survminer)
 
 **Data Overview**:
 
-  - **Study Reference**: [PubMed ID 29033130](https://pubmed.ncbi.nlm.nih.gov/29033130/)
+  - **Study Reference**: [PubMed ID 29033130](https://pubmed.ncbi.nlm.nih.gov/29033130/).
   - **Patient Count **: 83
   - **Treatment counts**:
   - **IO+combo**: 43
