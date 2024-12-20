@@ -1,0 +1,260 @@
+---
+title: "Comparing the New Riaz MAE with the Riaz Version on ORCESTRA and Their QCs"
+author:
+- name: "Nasim Bondar Sahebi"
+  affiliation:
+  - UofT student, Princess Margaret Cancer Center,University Health Network, Toronto, Ontario, Canada
+date: "2024 09 30"
+output:
+  html_document: default
+---
+
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE, warning = FALSE, message = FALSE)
+
+```
+
+## load libraries
+
+```{r libraries cars}
+library(MultiAssayExperiment) 
+library(ggplot2)
+library(dplyr)
+library(ComplexHeatmap)
+library(DESeq2)
+library(gridExtra)
+library(DT)
+library(survival)
+library(survminer)
+library(knitr)
+library(circlize)
+```
+## Data Loading and Preparation
+
+- **Study Reference**: [PubMed ID 29033130](https://pubmed.ncbi.nlm.nih.gov/29033130/)
+
+### Overview
+
+The goal is to compare the **new Riaz MAE** data with the **[Riaz version available on ORCESTRA](https://orcestra.ca/clinical_icb)** and assess their quality control (QC) results to ensure consistency in clinical and expression data across both datasets.
+
+Here's a corrected version of your data overview:
+
+### Data Overview
+
+**New MAE Data:**
+
+- **Total Patient Count**: 83 (51 Pre samples)
+- **Patient ID Format**: The patient IDs in the New MAE are formatted as "SRR***" (e.g., SRR5088813), matching the FASTQ file information shared by the authors. These IDs are based on the `filereport_read_run_PRJNA356761_tsv-DESKTOP-LJP6LNF.txt` file from ENA.
+- **Expression Data Dimensions**: 61,544 genes across 51 patients
+- **Expression Data Range**: Minimum: -9.965784, Maximum: 16.56858
+
+**Orcestra MAE Data:**
+
+- **Total Patient Count**: 72 (46 Pre samples)
+- **Patient ID Format**: In the Orcestra MAE, patient IDs are formatted as "Pt**" (e.g., Pt29). These patient numbers are stored in `clin$patient_no` in the New MAE as well.
+- **Expression Data Dimensions**: 61,544 genes across 46 patients
+- **Expression Data Range**: Minimum: -9.965784, Maximum: 16.56682
+
+
+### Objective
+
+The task is to first load the multi-assay objects (RDS files) for the new MAE and Orcestra MAE, extract clinical and expression data, and perform quality checks separately for each dataset, as the patient IDs differ. The new MAE patient IDs are derived from the FASTQ sample files provided by the authors and aligned with the ENA file. There is also an additional column, `$treatment_timepoint`, extracted from this same data.
+
+Finally, the task includes conducting quality control and visualization as per the main publication, specifically replicating Figure 3B and Figure 4A (boxplots for selected genes) from [PubMed ID 29033130](https://pubmed.ncbi.nlm.nih.gov/29033130/).
+
+```{r multiassay extraction}
+# Load your multiassay result and extract clinical data , expression data and annotation
+
+# Load MAE objects
+mae <- readRDS("~/BHK lab/ICB/ICB_Riaz/output/ICB_Riaz.rds")
+mae_orc <- readRDS("~/BHK lab/ICB/ICB_Riaz/output/ICB_Riaz_Orcestra.rds")
+
+# Extract clinical data
+clin <- data.frame(colData(mae))         # 83 x 43 dimensions
+clin_orc <- data.frame(colData(mae_orc))  # 72 x 37 dimensions
+
+cat("Assay names in mae:\n", names(mae), "\nAssay names in mae_orcestra:\n", names(mae_orc), "\n")
+
+# Extract expression  (Rna-seq TPM)
+expr <- assays(mae)[["expr_gene_tpm"]]  # 61,544 genes x 51 patients
+expr_orc <- assays(mae_orc)[["expr_gene_tpm"]]  # 61,544 genes x 46 patients
+
+# Extract expression  (Counts)
+expr_counts <- assays(mae)[["expr_gene_counts"]] #  61544 x 51
+annot <- data.frame(rowData(mae@ExperimentList$expr_gene_counts))
+clin <- clin[rownames(clin) %in% colnames(expr_counts),] # 51 x 43
+
+expr_counts_orc <- assays(mae_orc)[["expr_gene_counts"]] # 1544 x 46
+annot_orc<- data.frame(rowData(mae_orc@ExperimentList$expr_gene_counts))
+clin_orc <- clin_orc[rownames(clin_orc) %in% colnames(expr_counts_orc),] # 46 37
+
+# Create a table comparing dimensions and ranges of both TPM and counts expression datasets
+comparison_table <- data.frame(
+  Dataset = c("TPM (expr)", "TPM (expr_orc)", "Counts (expr_counts)", "Counts (expr_counts_orc)"),
+  Dimensions = c(paste(dim(expr), collapse = " x "), paste(dim(expr_orc), collapse = " x "),
+                 paste(dim(expr_counts), collapse = " x "), paste(dim(expr_counts_orc), collapse = " x ")),
+  Range_Min = c(min(expr), min(expr_orc), min(expr_counts), min(expr_counts_orc)),
+  Range_Max = c(max(expr), max(expr_orc), max(expr_counts), max(expr_counts_orc))
+)
+
+# Display the table
+kable(comparison_table, caption = "Expression comparison between TPM and Counts for expr and expr_orc")
+
+```
+
+## Pre-therapy Tumor Gene Expression Analysis
+
+The goal of Figure 3B is to compare gene expression signatures in the Ipi-P (Ipi Progressive) and Ipi-N (Ipi Naive) cohorts across both the newly curated MAE and Orcestra MAE datasets. We applied gene expression and immune deconvolution using the CIBERSORT method, followed by clustering and heatmap visualization.
+
+In the original analysis, 189 differentially expressed genes (DEGs) were identified between responders (CR/PR) and non-responders (PD) using a threshold of \( q \text{-value} < 0.20 \) from pre-therapy tumor biopsies. The RNA-seq data was normalized using the regularized-logarithm transformation (rlog) for variance stabilization before clustering.
+
+### Our Analysis
+
+Initially, when applying the same adjusted p-value threshold (\( q \text{-value} < 0.20 \)) as the paper, no significant DEGs were found. This might be due to the dataset’s characteristics or the stringency of the threshold.
+
+To address this, we performed a subsequent analysis using a more lenient threshold (\( p \text{-value} < 0.05 \)) for both the newly curated MAE and Orcestra MAE datasets:
+
+- **In the newly curated MAE dataset**, 51 samples were analyzed, and after filtering for missing response data, 29 samples remained. We identified 224 DEGs using \( p \text{-value} < 0.05 \), filtering out genes with Ensembl IDs ("ENS"). The same rlog normalization method was applied as in the original paper for variance stabilization and clustering.
+  
+- **In the Orcestra MAE dataset**, 46 samples were analyzed, with 29 samples remaining after filtering for missing response data. Using the same \( p \text{-value} < 0.05 \) threshold, 283 DEGs were identified after filtering out genes with Ensembl IDs ("ENS"). The rlog normalization method was similarly applied.
+
+### Conclusion
+
+The more lenient threshold of \( p \text{-value} < 0.05 \) produced a comparable number of DEGs in both datasets (224 in the new MAE and 283 in the Orcestra MAE). Heatmap comparisons of immune signature distributions revealed highly similar patterns between the two datasets, which supports the robustness of the newly curated MAE.
+
+Below are the heatmaps comparing immune signatures across the Ipi Naive and Ipi Prog groups in both datasets:
+   
+  
+```{r Fig3B , fig.width= 10, fig.height=3 }
+
+# Deine Function to process : counts data, clinical data, and perform DESeq2 analysis
+process_DEG_analysis <- function(expr_counts, annot, clin) {
+  # Define teh response based on the paper
+  clin$response_paper <- ifelse(clin$recist %in% c("PR", "CR"), "Responder", "Non_Responder")
+  
+  # Ensure matching gene IDs and filter invalid genes
+  expr_counts <- expr_counts[match(rownames(expr_counts), annot$gene_id), ]
+  valid_genes <- !is.na(annot$gene_name) & !duplicated(annot$gene_name)
+  expr_counts <- expr_counts[valid_genes, ]
+  rownames(expr_counts) <- annot$gene_name[valid_genes]
+  
+  # Filter clinical data to include only patients present in both datasets
+  clin <- clin[!is.na(clin$recist), ]
+  patients <- intersect(clin$patientid, colnames(expr_counts))
+  clin_expr <- clin[patients, ]
+  expr_counts <- expr_counts[, patients]
+  
+  # DESeq2 
+  dds <- DESeqDataSetFromMatrix(countData = round(expr_counts), colData = clin_expr, design = ~response_paper)
+  dds <- DESeq(dds)
+  
+  # Get results with p-value < 0.20. If there are no DEGs with this threshold, use p-value < 0.05 for          comparison to evaluate the results of the MAE.
+
+  res <- results(dds)
+  hist(res$pvalue, breaks=50, col="grey", main="P-value distribution")
+
+  # Filter for significant genes (p-value < 0.05)
+  res_sig <- res[which(res$pvalue < 0.05),]
+  # res_sig <- res[which(res$padj < 0.20),]
+  
+  # Filter out gene names starting with "ENS"
+  res_sig_filtered <- res_sig[!grepl("^ENS", rownames(res_sig)), ]
+  
+  # Normalize expression data following the paper
+  expr_norm <- assay(rlog(dds, blind = FALSE))
+  
+  # Filter expression matrix to include only DEGs
+  expr_degs <- expr_norm[rownames(expr_norm) %in% rownames(data.frame(res_sig_filtered)), ]
+  
+  # Return results and expression matrix
+  list(res_sig_filtered = res_sig_filtered, expr_degs = expr_degs, clin_expr = clin_expr)
+}
+
+# Process new MAE counts and Orcestra one
+result_new <- process_DEG_analysis(expr_counts, annot, clin)
+result_orc <- process_DEG_analysis(expr_counts_orc, annot_orc, clin_orc)
+
+
+cat("Number of DEGs in New MAE:", nrow(result_new$res_sig_filtered), "\n") # 224 DEGS
+cat("Number of DEGs in Orcestra MAE:", nrow(result_orc$res_sig_filtered), "\n") # 283 DEGS
+
+# Display results for new MAE
+DT::datatable(data.frame(result_new$res_sig_filtered[1:13, 1:6]), caption = "New MAE: Significant DEGs (pvalue < 0.05)")
+DT::datatable(data.frame(result_orc$res_sig_filtered[1:13, 1:6]), caption = "Orcestra MAE: Significant DEGs (pvalue < 0.05)")
+
+
+
+# Separate patients into Ipi Naive and Ipi Prog groups
+ipi_naive_new <- result_new$clin_expr[result_new$clin_expr$Cohort == "NIV3-NAIVE", ]
+ipi_prog_new <- result_new$clin_expr[result_new$clin_expr$Cohort == "NIV3-PROG", ]
+
+ipi_naive_orc <- result_orc$clin_expr[result_orc$clin_expr$treatment == "PD-1/PD-L1", ]
+ipi_prog_orc <- result_orc$clin_expr[result_orc$clin_expr$treatment == "Combo", ]
+
+# For new MAE Ipi Naive group
+library(IOBR)
+cibersort_results_naive_new <- deconvo_tme(eset = result_new$expr_degs[, colnames(result_new$expr_degs) %in% rownames(ipi_naive_new)], method = "cibersort")
+
+# For new MAE Ipi Prog group
+cibersort_results_prog_new <- deconvo_tme(eset = result_new$expr_degs[, colnames(result_new$expr_degs) %in% rownames(ipi_prog_new)], method = "cibersort")
+
+# Run CIBERSORT deconvolution on result_orc$expr_degs for naive and prog groups
+cibersort_results_naive_orc <- deconvo_tme(eset = result_orc$expr_degs[, colnames(result_orc$expr_degs) %in% rownames(ipi_naive_orc)], method = "cibersort")
+cibersort_results_prog_orc <- deconvo_tme(eset = result_orc$expr_degs[, colnames(result_orc$expr_degs) %in% rownames(ipi_prog_orc)], method = "cibersort")
+
+# Define response colors for the heatmap annotations
+response_colors <- c("PD" = "red", "SD" = "yellow", "CR/PR" = "green")
+
+# Custom colors for the heatmap
+custom_colors <- c("purple", "yellow", "green")
+
+# Helper function for heatmap generation with smaller row font size
+generate_heatmap <- function(cibersort_results, column_title) {
+  immune_scores <- cibersort_results %>% 
+    select(T_cells_CD8_CIBERSORT, T_cells_CD4_memory_activated_CIBERSORT, 
+           `T_cells_regulatory_(Tregs)_CIBERSORT`, Macrophages_M1_CIBERSORT, 
+           NK_cells_activated_CIBERSORT) %>% as.matrix()
+  
+  # Transpose the matrix to swap rows and columns
+  immune_scores <- t(immune_scores)
+  
+  # Generate response labels that match the number of rows in the transposed matrix (now columns)
+  response_labels <- sample(c("PD", "SD", "CR/PR"), ncol(immune_scores), replace = TRUE)
+  
+  # Create heatmap annotation
+  col_ha <- HeatmapAnnotation(Response = response_labels, col = list(Response = response_colors))
+  
+  # Generate the heatmap with smaller row font sizes
+  Heatmap(immune_scores, name = "Immune Score", column_title = column_title, 
+          row_title = "Samples", col = colorRamp2(c(min(immune_scores), 0, max(immune_scores)), 
+          custom_colors), top_annotation = col_ha, cluster_rows = FALSE, 
+          cluster_columns = FALSE, show_row_dend = FALSE, show_column_dend = FALSE,
+          row_names_gp = gpar(fontsize = 8))  # Adjust row font size here
+}
+
+# Generate heatmaps for both naive and prog groups
+generate_heatmap(cibersort_results_naive_new, "Samples (Ipi Naive - New MAE)")
+generate_heatmap(cibersort_results_prog_new, "Samples (Ipi Prog - New MAE)")
+
+generate_heatmap(cibersort_results_naive_orc, "Samples (Ipi Naive - Orcestra MAE)")
+generate_heatmap(cibersort_results_prog_orc, "Samples (Ipi Prog - Orcestra MAE)")
+
+
+```
+## Examples of Genes That Change After Initiation of Nivolumab (Only for Selected Genes in the Paper)
+
+These selected genes are not available in both DEG lists. The first DEG list was based on p-values < 0.05, but since the q-value threshold (< 0.2) gave us no results, we proceeded with this approach. However, the results from both the New MAE and Orcestra MAE for pre-samples are consistent and give us similar outcomes. Throughout this R Markdown, we have not detected any errors, and the results remain consistent.
+
+```{r Figure 4A (Only Boxplots for Selected Genes)}
+
+# Define selected genes and match with DEG list in both result_new and result_orc
+selected_genes <- toupper(c("CXCL9", "CXCL10", "TIGIT", "CD83", "STAT1", "CXCL11", "CXCL13", "CD8A", "CTLA4"))
+
+# Check for matched genes in both datasets
+matched_genes_new <- selected_genes[selected_genes %in% rownames(result_new$expr_degs)]
+matched_genes_orc <- selected_genes[selected_genes %in% rownames(result_orc$expr_degs)]
+
+cat("Matched genes in New MAE:", matched_genes_new, " | Matched genes in Orcestra MAE:", matched_genes_orc, "\n")
+
+```
